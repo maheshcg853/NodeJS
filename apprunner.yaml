@@ -3,9 +3,7 @@ runtime: nodejs16
 build:
   commands:    
     build:
-      - npm install --production
-      - npm run lint
-      - npm run build                              
+      - npm install                            
 run:                              
   command: node app.js
   network:
