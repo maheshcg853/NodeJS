@@ -1,0 +1,10 @@
+version: 1.0
+runtime: nodejs16
+build:
+  commands:    
+    build:
+      - npm install --production
+      - npm run lint
+      - npm run build                              
+run:                              
+  command: node app.js
