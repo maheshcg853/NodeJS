@@ -8,3 +8,5 @@ build:
       - npm run build                              
 run:                              
   command: node app.js
+  network:
+    port: 3000
