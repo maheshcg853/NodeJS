@@ -1,52 +1,63 @@
 const express = require('express');
-const Redis = require('ioredis'); // ioredis is recommended for Cluster Mode
 const app = express();
 const port = process.env.PORT || 3000;
 
-// 1. Initialize the Cluster connection
-// Provide your ElastiCache "Configuration Endpoint" here. 
-// ioredis will automatically discover all other nodes in the cluster.
-const redis = new Redis.Cluster([
-  {
-    host: process.env.REDIS_CONF_ENDPOINT || 'master.apprunner-elasticcache.qcqeed.use1.cache.amazonaws.com',
-    port: 6379
-  }
-], {
-  redisOptions: {
-    // Required if your ElastiCache has "Encryption in-transit" enabled
-    tls: {}, 
-    // Use if you have AUTH enabled (RBAC or Auth Token)
-    // password: process.env.REDIS_PASSWORD 
-  },
-  // Ensures DNS resolution works correctly within AWS VPC
-  dnsLookup: (address, callback) => callback(null, address) 
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Hello from AWS App Runner!',
+    timestamp: new Date().toISOString()
+  });
 });
 
-redis.on('error', (err) => console.error('Redis Cluster Error:', err));
-redis.on('connect', () => console.log('Successfully connected to Redis Cluster'));
-
-app.get('/', async (req, res) => {
-  try {
-    // Example: Use the cluster to store/get data
-    await redis.set('last_access', new Date().toISOString());
-    const lastAccess = await redis.get('last_access');
-
-    res.json({
-      message: 'Hello from AWS App Runner!',
-      redis_data: lastAccess,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'Redis operation failed' });
-  }
-});
-
-app.get('/health', async (req, res) => {
-  // Check cluster status for health checks
-  const status = redis.status === 'ready' ? 'healthy' : 'unhealthy';
-  res.status(status === 'healthy' ? 200 : 503).json({ status });
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'healthy' });
 });
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
+
+
+const { createClient } = require("redis");
+
+let client;
+
+function getRedisClient() {
+  if (client) return client;
+
+  // const redisUrl = process.env.REDIS_URL;
+  const redisUrl =
+    "rediss://master.apprunner-elasticcache.qcqeed.use1.cache.amazonaws.com:6379";
+  
+  if (!redisUrl) throw new Error("REDIS_URL is missing");
+
+  const isTls = true;
+  // const isTls =
+  //   process.env.REDIS_TLS === "true" || redisUrl.startsWith("rediss://");
+
+  client = createClient({
+    url: redisUrl,
+    socket: {
+      tls: isTls,
+      // For ElastiCache TLS, many teams set this false.
+      // If you want strict validation later, set it to true and use proper CA/certs.
+      rejectUnauthorized: true,
+      // rejectUnauthorized: process.env.REDIS_REJECT_UNAUTHORIZED !== "false",
+    },
+  });
+
+  client.on("error", (err) => {
+    console.error("Redis error:", err);
+    process.exit(1);
+  });
+
+  return client;
+}
+
+async function connectRedis() {
+  const c = getRedisClient();
+  if (!c.isOpen) await c.connect();
+  return c;
+}
+
+module.exports = { getRedisClient, connectRedis };
